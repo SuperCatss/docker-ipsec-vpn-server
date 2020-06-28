@@ -1,22 +1,58 @@
-name: buildx latest
+name: buildx latest on Debian updates
 
 on:
-  push:
-    branches: [master]
-    paths-ignore:
-      - .github/workflows/buildx-latest-debian-updates.yml
-      - .gitignore
-      - .travis.yml
-      - docker-compose.yml
-      - LICENSE.md
-      - README.md
-      - README-zh.md
-      - vpn.env.example
-  repository_dispatch:
-    types: [start-buildx-workflow]
+  schedule:
+    - cron: '25 10,22 * * *'
 
 jobs:
+  check_update:
+    runs-on: ubuntu-latest
+    outputs:
+      debian_updated: ${{ steps.check.outputs.debian_updated }}
+    steps:
+      - name: Prepare
+        run: |
+          docker pull debian:buster-slim
+          docker pull hwdsl2/ipsec-vpn-server
+      - name: Check
+        id: check
+        if: success()
+        run: |
+          DEBIAN_UPDATED=false
+
+          debian_update_time=$(docker inspect --format='{{.Created}}' debian:buster-slim)
+          image_update_time=$(docker inspect --format='{{.Created}}' hwdsl2/ipsec-vpn-server)
+
+          if [ -n "$debian_update_time" ] && [ -n "$image_update_time" ]; then
+            debian_update_time_s=$(date -d "$debian_update_time" +%s)
+            image_update_time_s=$(date -d "$image_update_time" +%s)
+            current_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            current_time_s=$(date -d "$current_time" +%s)
+            diff_time_s=$((current_time_s - debian_update_time_s))
+
+            echo "Debian update time:     $debian_update_time"
+            echo "Debian update time (s): $debian_update_time_s"
+            echo "Image update time:      $image_update_time"
+            echo "Image update time (s):  $image_update_time_s"
+            echo "Current time:           $current_time"
+            echo "Current time (s):       $current_time_s"
+            echo "Time diff (cur-debian): $diff_time_s"
+
+            if [ -n "$debian_update_time_s" ] && [ -n "$image_update_time_s" ] \
+              && [ "$debian_update_time_s" -ge "$image_update_time_s" ] \
+              && [ "$diff_time_s" -ge 14400 ]; then
+              echo "Starting build..."
+              DEBIAN_UPDATED=true
+            else
+              echo "Not starting build."
+            fi
+          fi
+
+          echo ::set-output name=debian_updated::${DEBIAN_UPDATED}
+
   buildx:
+    needs: check_update
+    if: needs.check_update.outputs.debian_updated == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
