@@ -15,7 +15,7 @@ on:
 
 jobs:
   shellcheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: github.repository_owner == 'hwdsl2' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v2
@@ -42,7 +42,7 @@ jobs:
           shopt -u globstar
 
   check_update:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: github.repository_owner == 'hwdsl2'
     env:
       DOCKER_USER: ${{ github.repository_owner }}
@@ -101,7 +101,7 @@ jobs:
   vpn_test:
     needs: check_update
     if: needs.check_update.outputs.should_update == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         test_id: [no-env, with-env]
@@ -131,7 +131,17 @@ jobs:
             --restart=always \
             -p 500:500/udp \
             -p 4500:4500/udp \
-            -d --privileged \
+            -d --cap-add=NET_ADMIN \
+            --device=/dev/ppp \
+            --sysctl net.ipv4.ip_forward=1 \
+            --sysctl net.ipv4.conf.all.accept_redirects=0 \
+            --sysctl net.ipv4.conf.all.send_redirects=0 \
+            --sysctl net.ipv4.conf.all.rp_filter=0 \
+            --sysctl net.ipv4.conf.default.accept_redirects=0 \
+            --sysctl net.ipv4.conf.default.send_redirects=0 \
+            --sysctl net.ipv4.conf.default.rp_filter=0 \
+            --sysctl net.ipv4.conf.eth0.send_redirects=0 \
+            --sysctl net.ipv4.conf.eth0.rp_filter=0 \
             vpn-test
           elif [ "$TEST_ID" = "no-env" ]; then
             docker run \
@@ -139,7 +149,17 @@ jobs:
             --restart=always \
             -p 500:500/udp \
             -p 4500:4500/udp \
-            -d --privileged \
+            -d --cap-add=NET_ADMIN \
+            --device=/dev/ppp \
+            --sysctl net.ipv4.ip_forward=1 \
+            --sysctl net.ipv4.conf.all.accept_redirects=0 \
+            --sysctl net.ipv4.conf.all.send_redirects=0 \
+            --sysctl net.ipv4.conf.all.rp_filter=0 \
+            --sysctl net.ipv4.conf.default.accept_redirects=0 \
+            --sysctl net.ipv4.conf.default.send_redirects=0 \
+            --sysctl net.ipv4.conf.default.rp_filter=0 \
+            --sysctl net.ipv4.conf.eth0.send_redirects=0 \
+            --sysctl net.ipv4.conf.eth0.rp_filter=0 \
             vpn-test
           fi
 
@@ -186,7 +206,7 @@ jobs:
   buildx:
     needs: [check_update, vpn_test]
     if: needs.check_update.outputs.should_update == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
         with:
@@ -224,6 +244,12 @@ jobs:
           DOCKER_USER: ${{ github.repository_owner }}
           DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
         run: echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin 2>&1
+      - name: Quay.io Login
+        if: success()
+        env:
+          QUAY_USER: ${{ secrets.QUAY_USER }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+        run: echo "$QUAY_TOKEN" | docker login quay.io --username "$QUAY_USER" --password-stdin 2>&1
       - name: Docker Buildx (build and push)
         if: success()
         env:
@@ -232,14 +258,25 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           pwd
           ls -ld vpn.env.example
+          current_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
           docker buildx build \
             --progress plain \
             --platform=linux/amd64,linux/arm64,linux/arm/v7 \
-            --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+            --build-arg BUILD_DATE=$current_time \
             --build-arg VCS_REF=${GITHUB_SHA::8} \
             --build-arg VERSION=latest \
             -t "$DOCKER_USER/ipsec-vpn-server:latest" \
+            --push \
+            .
+
+          docker buildx build \
+            --progress plain \
+            --platform=linux/amd64,linux/arm64,linux/arm/v7 \
+            --build-arg BUILD_DATE=$current_time \
+            --build-arg VCS_REF=${GITHUB_SHA::8} \
+            --build-arg VERSION=latest \
+            -t "quay.io/$DOCKER_USER/ipsec-vpn-server:latest" \
             --push \
             .
       - name: Clear

@@ -1,6 +1,6 @@
 # Docker 上的 IPsec VPN 服务器
 
-[![Build Status](https://img.shields.io/github/workflow/status/hwdsl2/docker-ipsec-vpn-server/buildx%20latest.svg?cacheSeconds=600)](https://github.com/hwdsl2/docker-ipsec-vpn-server/actions) [![GitHub Stars](https://img.shields.io/github/stars/hwdsl2/docker-ipsec-vpn-server.svg?cacheSeconds=3600)](https://github.com/hwdsl2/docker-ipsec-vpn-server/stargazers) [![Docker Stars](https://img.shields.io/docker/stars/hwdsl2/ipsec-vpn-server.svg?cacheSeconds=3600)](https://hub.docker.com/r/hwdsl2/ipsec-vpn-server/) [![Docker Pulls](https://img.shields.io/docker/pulls/hwdsl2/ipsec-vpn-server.svg?cacheSeconds=3600)](https://hub.docker.com/r/hwdsl2/ipsec-vpn-server/)
+[![Build Status](https://img.shields.io/github/workflow/status/hwdsl2/docker-ipsec-vpn-server/buildx%20latest.svg?cacheSeconds=3600)](https://github.com/hwdsl2/docker-ipsec-vpn-server/actions) [![GitHub Stars](https://img.shields.io/github/stars/hwdsl2/docker-ipsec-vpn-server.svg?cacheSeconds=86400)](https://github.com/hwdsl2/docker-ipsec-vpn-server/stargazers) [![Docker Stars](https://img.shields.io/docker/stars/hwdsl2/ipsec-vpn-server.svg?cacheSeconds=86400)](https://hub.docker.com/r/hwdsl2/ipsec-vpn-server/) [![Docker Pulls](https://img.shields.io/docker/pulls/hwdsl2/ipsec-vpn-server.svg?cacheSeconds=86400)](https://hub.docker.com/r/hwdsl2/ipsec-vpn-server/)
 
 使用这个 Docker 镜像快速搭建 IPsec VPN 服务器。支持 `IPsec/L2TP` 和 `Cisco IPsec` 协议。
 
@@ -37,9 +37,16 @@
 docker pull hwdsl2/ipsec-vpn-server
 ```
 
+或者，你也可以从 [Quay.io](https://quay.io/repository/hwdsl2/ipsec-vpn-server) 下载这个镜像：
+
+```
+docker pull quay.io/hwdsl2/ipsec-vpn-server
+docker image tag quay.io/hwdsl2/ipsec-vpn-server hwdsl2/ipsec-vpn-server
+```
+
 支持以下架构系统：`linux/amd64`, `linux/arm64` 和 `linux/arm/v7`。
 
-或者，你也可以自己从 GitHub [编译源代码](#从源代码构建)。
+高级用户可以自己从 GitHub [编译源代码](#从源代码构建)。
 
 ## 如何使用本镜像
 
@@ -80,6 +87,8 @@ docker run \
     -d --privileged \
     hwdsl2/ipsec-vpn-server
 ```
+
+**注：** 高级用户也可以 [不启用 privileged 模式运行](#不启用-privileged-模式运行)。
 
 ### 获取 VPN 登录信息
 
@@ -154,13 +163,7 @@ docker exec -it ipsec-vpn-server ipsec whack --trafficstatus
 
 ## 更新 Docker 镜像
 
-如需更新你的 Docker 镜像和容器，请按以下步骤进行：
-
-```
-docker pull hwdsl2/ipsec-vpn-server
-```
-
-如果 Docker 镜像已经是最新的，你会看到提示：
+如需更新你的 Docker 镜像和容器，请首先按照 [下载](#下载) 小节的说明操作。如果 Docker 镜像已经是最新的，你会看到提示：
 
 ```
 Status: Image is up to date for hwdsl2/ipsec-vpn-server:latest
@@ -169,6 +172,17 @@ Status: Image is up to date for hwdsl2/ipsec-vpn-server:latest
 否则，将会下载最新版本。要更新你的 Docker 容器，首先在纸上记下你所有的 [VPN 登录信息](#获取-vpn-登录信息)。然后删除 Docker 容器： `docker rm -f ipsec-vpn-server`。最后按照 [这一小节](#如何使用本镜像) 的说明来重新创建它。
 
 ## 高级用法
+
+*其他语言版本: [English](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README.md#advanced-usage), [简体中文](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README-zh.md#高级用法).*
+
+- [使用其他的 DNS 服务器](#使用其他的-dns-服务器)
+- [不启用 privileged 模式运行](#不启用-privileged-模式运行)
+- [使用 host network 模式](#使用-host-network-模式)
+- [配置并使用 IKEv2 VPN](#配置并使用-ikev2-vpn)
+- [启用 Libreswan 日志](#启用-libreswan-日志)
+- [从源代码构建](#从源代码构建)
+- [在容器中运行 Bash shell](#在容器中运行-bash-shell)
+- [绑定挂载 env 文件](#绑定挂载-env-文件)
 
 ### 使用其他的 DNS 服务器
 
@@ -179,6 +193,60 @@ VPN_DNS_SRV1=1.1.1.1
 VPN_DNS_SRV2=1.0.0.1
 ```
 
+### 不启用 privileged 模式运行
+
+高级用户可以在不启用 [privileged 模式](https://docs.docker.com/engine/reference/run/#runtime-privilege-and-linux-capabilities) 的情况下使用本镜像创建一个 Docker 容器 （将 `./vpn.env` 替换为你自己的 `env` 文件）：
+
+```
+docker run \
+    --name ipsec-vpn-server \
+    --env-file ./vpn.env \
+    --restart=always \
+    -p 500:500/udp \
+    -p 4500:4500/udp \
+    -d --cap-add=NET_ADMIN \
+    --device=/dev/ppp \
+    --sysctl net.ipv4.ip_forward=1 \
+    --sysctl net.ipv4.conf.all.accept_redirects=0 \
+    --sysctl net.ipv4.conf.all.send_redirects=0 \
+    --sysctl net.ipv4.conf.all.rp_filter=0 \
+    --sysctl net.ipv4.conf.default.accept_redirects=0 \
+    --sysctl net.ipv4.conf.default.send_redirects=0 \
+    --sysctl net.ipv4.conf.default.rp_filter=0 \
+    --sysctl net.ipv4.conf.eth0.send_redirects=0 \
+    --sysctl net.ipv4.conf.eth0.rp_filter=0 \
+    hwdsl2/ipsec-vpn-server
+```
+
+在创建 Docker 容器之后，请转到 [获取 VPN 登录信息](#获取-vpn-登录信息)。
+
+类似地，如果你使用 [Docker compose](https://docs.docker.com/compose/)，可以将 [docker-compose.yml](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/docker-compose.yml) 中的 `privileged: true` 替换为：
+
+```
+  cap_add:
+    - NET_ADMIN
+  devices:
+    - "/dev/ppp:/dev/ppp"
+  sysctls:
+    - net.ipv4.ip_forward=1
+    - net.ipv4.conf.all.accept_redirects=0
+    - net.ipv4.conf.all.send_redirects=0
+    - net.ipv4.conf.all.rp_filter=0
+    - net.ipv4.conf.default.accept_redirects=0
+    - net.ipv4.conf.default.send_redirects=0
+    - net.ipv4.conf.default.rp_filter=0
+    - net.ipv4.conf.eth0.send_redirects=0
+    - net.ipv4.conf.eth0.rp_filter=0
+```
+
+更多信息请参见 [compose file reference](https://docs.docker.com/compose/compose-file/)。
+
+### 使用 host network 模式
+
+高级用户可以使用 [host network 模式](https://docs.docker.com/network/host/) 运行本镜像，通过为 `docker run` 命令添加 `--network=host` 参数来实现。
+
+在非必要的情况下，不推荐使用该模式运行本镜像。在 host network 模式下，容器的网络栈未与 Docker 主机隔离，从而在使用 IPsec/L2TP 模式连接之后，VPN 客户端可以使用 Docker 主机的 VPN 内网 IP `192.168.42.1` 访问主机上的端口或服务。请注意，当你不再使用本镜像时，你需要手动清理 [run.sh](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/run.sh) 所更改的 IPTables 规则和 sysctl 设置，或者重启服务器。某些 Docker 主机操作系统，比如 Debian 10，不能使用 host network 模式运行本镜像，因为它们使用 nftables。
+
 ### 配置并使用 IKEv2 VPN
 
 *其他语言版本: [English](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README.md#configure-and-use-ikev2-vpn), [简体中文](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README-zh.md#配置并使用-ikev2-vpn).*
@@ -187,16 +255,7 @@ VPN_DNS_SRV2=1.0.0.1
 
 请按照以下步骤操作：
 
-1. [下载最新版本](#更新-docker-镜像)的 Docker 镜像。在纸上记下你所有的 [VPN 登录信息](#获取-vpn-登录信息)，然后删除 Docker 容器。
-
-   ```
-   # 下载最新版本的 Docker 镜像
-   docker pull hwdsl2/ipsec-vpn-server
-
-   # 首先在纸上记下你所有的 VPN 登录信息
-   # 然后删除 Docker 容器
-   docker rm -f ipsec-vpn-server
-   ```
+1. [下载最新版本](#下载)的 Docker 镜像。在纸上记下你所有的 [VPN 登录信息](#获取-vpn-登录信息)，然后删除 Docker 容器。参见 [更新 Docker 镜像](#更新-docker-镜像) 一节。
 
 1. 创建一个新的 Docker 容器（将 `./vpn.env` 替换为你自己的 [env 文件](#如何使用本镜像)）。
 
@@ -238,6 +297,32 @@ VPN_DNS_SRV2=1.0.0.1
    ```
    docker cp ipsec-vpn-server:/etc/ipsec.d/vpnclient-日期-时间.p12 ./
    ```
+
+### 启用 Libreswan 日志
+
+为了保持较小的 Docker 镜像，Libreswan (IPsec) 日志默认未开启。如果你是高级用户，并且需要启用它以便进行故障排除，首先在正在运行的 Docker 容器中开始一个 Bash 会话：
+
+```
+docker exec -it ipsec-vpn-server env TERM=xterm bash -l
+```
+
+然后运行以下命令：
+
+```
+apt-get update && apt-get -y install rsyslog
+service rsyslog restart
+service ipsec restart
+sed -i '/pluto\.pid/a service rsyslog restart' /opt/src/run.sh
+exit
+```
+
+完成后你可以这样查看 Libreswan 日志：
+
+```
+docker exec -it ipsec-vpn-server grep pluto /var/log/auth.log
+```
+
+如需查看 xl2tpd 日志，请运行 `docker logs ipsec-vpn-server`。
 
 ### 从源代码构建
 
@@ -290,32 +375,6 @@ docker run \
     -d --privileged \
     hwdsl2/ipsec-vpn-server
 ```
-
-### 启用 Libreswan 日志
-
-为了保持较小的 Docker 镜像，Libreswan (IPsec) 日志默认未开启。如果你是高级用户，并且需要启用它以便进行故障排除，首先在正在运行的 Docker 容器中开始一个 Bash 会话：
-
-```
-docker exec -it ipsec-vpn-server env TERM=xterm bash -l
-```
-
-然后运行以下命令：
-
-```
-apt-get update && apt-get -y install rsyslog
-service rsyslog restart
-service ipsec restart
-sed -i '/pluto\.pid/a service rsyslog restart' /opt/src/run.sh
-exit
-```
-
-完成后你可以这样查看 Libreswan 日志：
-
-```
-docker exec -it ipsec-vpn-server grep pluto /var/log/auth.log
-```
-
-如需查看 xl2tpd 日志，请运行 `docker logs ipsec-vpn-server`。
 
 ## 技术细节
 
